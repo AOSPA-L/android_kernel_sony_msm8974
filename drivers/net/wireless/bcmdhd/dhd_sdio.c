@@ -1,7 +1,7 @@
 /*
  * DHD Bus Module for SDIO
  *
- * Copyright (C) 1999-2014, Broadcom Corporation
+ * Copyright (C) 1999-2015, Broadcom Corporation
  * Copyright (C) 2013 Sony Mobile Communications Inc.
  * 
  *      Unless you and Broadcom execute a separate written software license
@@ -22,7 +22,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_sdio.c 500511 2014-09-04 08:00:54Z $
+ * $Id: dhd_sdio.c 548462 2015-04-13 09:02:48Z $
  */
 
 #include <typedefs.h>
@@ -102,7 +102,7 @@ extern bool  bcmsdh_fatal_error(void *sdh);
 #define DHD_TXMINMAX	1	/* Max tx frames if rx still pending */
 
 #define MEMBLOCK	2048		/* Block size used for downloading of dongle image */
-#define MAX_NVRAMBUF_SIZE	4096	/* max nvram buf size */
+#define MAX_NVRAMBUF_SIZE	(6 * 1024) /* max nvram buf size */
 #define MAX_DATA_BUF	(64 * 1024)	/* Must be large enough to hold biggest possible glom */
 
 #ifndef DHD_FIRSTREAD
@@ -564,6 +564,7 @@ static void dhdsdio_sdtest_set(dhd_bus_t *bus, uint count);
 #ifdef DHD_DEBUG
 static int dhdsdio_checkdied(dhd_bus_t *bus, char *data, uint size);
 static int dhd_serialconsole(dhd_bus_t *bus, bool get, bool enable, int *bcmerror);
+static int dhdsdio_mem_dump(dhd_bus_t *bus);
 #endif /* DHD_DEBUG */
 
 static int dhdsdio_devcap_set(dhd_bus_t *bus, uint8 cap);
@@ -805,6 +806,7 @@ dhdsdio_sr_cap(dhd_bus_t *bus)
 		(bus->sih->chip == BCM4339_CHIP_ID) ||
 		(bus->sih->chip == BCM43349_CHIP_ID) ||
 		(bus->sih->chip == BCM4345_CHIP_ID) ||
+		(bus->sih->chip == BCM43454_CHIP_ID) ||
 		(bus->sih->chip == BCM4354_CHIP_ID) ||
 		(bus->sih->chip == BCM4356_CHIP_ID) ||
 		(bus->sih->chip == BCM4350_CHIP_ID)) {
@@ -823,6 +825,7 @@ dhdsdio_sr_cap(dhd_bus_t *bus)
 		(bus->sih->chip == BCM4339_CHIP_ID) ||
 		(bus->sih->chip == BCM43349_CHIP_ID) ||
 		(bus->sih->chip == BCM4345_CHIP_ID) ||
+		(bus->sih->chip == BCM43454_CHIP_ID) ||
 		(bus->sih->chip == BCM4354_CHIP_ID) ||
 		(bus->sih->chip == BCM4356_CHIP_ID) ||
 		(bus->sih->chip == BCM4350_CHIP_ID)) {
@@ -834,6 +837,7 @@ dhdsdio_sr_cap(dhd_bus_t *bus)
 
 		if ((bus->sih->chip == BCM4350_CHIP_ID) ||
 			(bus->sih->chip == BCM4345_CHIP_ID) ||
+			(bus->sih->chip == BCM43454_CHIP_ID) ||
 			(bus->sih->chip == BCM4356_CHIP_ID) ||
 			(bus->sih->chip == BCM4354_CHIP_ID))
 			enabval &= CC_CHIPCTRL3_SR_ENG_ENABLE;
@@ -3008,9 +3012,7 @@ dhdsdio_readconsole(dhd_bus_t *bus)
 			if (line[n - 1] == '\r')
 				n--;
 			line[n] = 0;
-#ifndef SOMC_MIMO
 			printf("CONSOLE: %s\n", line);
-#endif
 #ifdef LOG_INTO_TCPDUMP
 			dhd_sendup_log(bus->dhd, line, n);
 #endif /* LOG_INTO_TCPDUMP */
@@ -3200,6 +3202,14 @@ printbuf:
 		DHD_ERROR(("%s: %s\n", __FUNCTION__, strbuf.origbuf));
 	}
 
+#ifdef DHD_DEBUG
+	if (sdpcm_shared.flags & SDPCM_SHARED_TRAP) {
+		/* Mem dump to a file on device */
+		dhdsdio_mem_dump(bus);
+		/* In some cases, the host back trace could be relevant too. */
+		WARN_ON(1);
+	}
+#endif /* DHD_DEBUG */
 
 done:
 	if (mbuffer)
@@ -3211,8 +3221,57 @@ done:
 
 	return bcmerror;
 }
-#endif /* #ifdef DHD_DEBUG */
 
+static int
+dhdsdio_mem_dump(dhd_bus_t *bus)
+{
+	int ret = 0;
+	int size; /* Full mem size */
+	int start = bus->dongle_ram_base; /* Start address */
+	int read_size = 0; /* Read size of each iteration */
+	uint8 *buf = NULL, *databuf = NULL;
+
+	/* Get full mem size */
+	size = bus->ramsize;
+	buf = MALLOC(bus->dhd->osh, size);
+	if (!buf) {
+		printf("%s: Out of memory (%d bytes)\n", __FUNCTION__, size);
+		return -1;
+	}
+
+	/* Read mem content */
+	DHD_ERROR(("Dump dongle memory"));
+	databuf = buf;
+	while (size)
+	{
+		read_size = MIN(MEMBLOCK, size);
+		if ((ret = dhdsdio_membytes(bus, FALSE, start, databuf, read_size)))
+		{
+			DHD_ERROR(("%s: Error membytes %d\n", __FUNCTION__, ret));
+			if (buf) {
+				MFREE(bus->dhd->osh, buf, size);
+			}
+			return -1;
+		}
+		/* Decrement size and increment start address */
+		size -= read_size;
+		start += read_size;
+		databuf += read_size;
+	}
+	DHD_ERROR(("Done\n"));
+
+	dhd_save_fwdump(bus->dhd, buf, bus->ramsize);
+	/* free buf before return !!! */
+	if (write_to_file(bus->dhd, buf, bus->ramsize))
+	{
+		printf("%s: Error writing to files\n", __FUNCTION__);
+		return -1;
+	}
+
+	/* buf free handled in write_to_file, not here */
+	return 0;
+}
+#endif /* DHD_DEBUG */
 
 int
 dhdsdio_downloadvars(dhd_bus_t *bus, void *arg, int len)
@@ -3627,7 +3686,7 @@ dhdsdio_doiovar(dhd_bus_t *bus, const bcm_iovar_t *vi, uint32 actionid, const ch
 
 		sd_ptr = (sdreg_t *)params;
 
-		addr = (ulong)bus->regs + sd_ptr->offset;
+		addr = (uint32)((ulong)bus->regs + sd_ptr->offset);
 		size = sd_ptr->func;
 		int_val = (int32)bcmsdh_reg_read(bus->sdh, addr, size);
 		if (bcmsdh_regfail(bus->sdh))
@@ -3643,7 +3702,7 @@ dhdsdio_doiovar(dhd_bus_t *bus, const bcm_iovar_t *vi, uint32 actionid, const ch
 
 		sd_ptr = (sdreg_t *)params;
 
-		addr = (ulong)bus->regs + sd_ptr->offset;
+		addr = (uint32)((ulong)bus->regs + sd_ptr->offset);
 		size = sd_ptr->func;
 		bcmsdh_reg_write(bus->sdh, addr, size, sd_ptr->value);
 		if (bcmsdh_regfail(bus->sdh))
@@ -6848,7 +6907,7 @@ dhdsdio_chipmatch(uint16 chipid)
 		return TRUE;
 	if (chipid == BCM43349_CHIP_ID)
 		return TRUE;
-	if (chipid == BCM4345_CHIP_ID)
+	if (chipid == BCM4345_CHIP_ID || chipid == BCM43454_CHIP_ID)
 		return TRUE;
 	if (chipid == BCM4350_CHIP_ID)
 		return TRUE;
@@ -7177,7 +7236,9 @@ dhdsdio_probe_attach(struct dhd_bus *bus, osl_t *osh, void *sdh, void *regsva,
 				bus->dongle_ram_base = CR4_4360_RAM_BASE;
 				break;
 			case BCM4345_CHIP_ID:
-				bus->dongle_ram_base = CR4_4345_RAM_BASE;
+			case BCM43454_CHIP_ID:
+				bus->dongle_ram_base = (bus->sih->chiprev < 6)  /* from 4345C0 */
+					? CR4_4345_LT_C0_RAM_BASE : CR4_4345_GE_C0_RAM_BASE;
 				break;
 			default:
 				bus->dongle_ram_base = 0;

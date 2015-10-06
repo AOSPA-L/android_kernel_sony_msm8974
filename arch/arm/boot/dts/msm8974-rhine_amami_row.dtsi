@@ -17,6 +17,22 @@
 /include/ "dsi-panel-amami.dtsi"
 
 &soc {
+	ramoops {
+		compatible = "ramoops";
+		status = "ok";
+
+		android,ramoops-buffer-start = <0x3e9e0000>;
+		android,ramoops-buffer-size = <0x100000>;
+		android,ramoops-console-size = <0x80000>;
+		android,ramoops-record-size = <0x7f800>;
+		android,ramoops-annotate-size = <0x800>;
+		android,ramoops-dump-oops = <0x1>;
+		android,ramoops-hole {
+			compatible = "qcom,msm-contig-mem";
+			qcom,memblock-reserve = <0x3e9e0000 0x100000>;
+		};
+	};
+
 	qcom,hdmi_tx@fd922100 {
 		status = "ok";
 	};
@@ -812,6 +828,10 @@
 			<&pm8941_gpios 14 0>;
 	};
 
+	qcom,wdt@f9017000 {
+		qcom,bark-time = <12000>;
+	};
+
 	qcom,msm-thermal {
 		qcom,pmic-sw-mode-regs = "vdd_dig";
 	};
@@ -845,6 +865,7 @@
 	qcom,vbatdet-delta-soc = <1>;
 	qcom,thermal-mitigation = <1300 1300 1100 900 700 500 300 200 100 0>;
 	qcom,tchg-mins = <512>;
+	qcom,vbatweak-mv = <3200>;
 };
 
 &pm8941_bms {
@@ -1591,6 +1612,10 @@
 	qcom,mdss-pref-prim-intf = "dsi";
 };
 
+&mdss_fb0 {
+	linux,contiguous-region = <&fb_mem>;
+};
+
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_novatek_default>;
 	vdd-supply = <&pm8941_lvs3>;
@@ -1629,5 +1654,15 @@
 			qcom,supply-post-on-sleep = <0>;
 			qcom,supply-pre-off-sleep = <0>;
 			qcom,supply-post-off-sleep = <0>;
+	};
+};
+
+/ {
+	memory {
+		fb_mem: fb_region@0 {
+			linux,contiguous-region;
+			reg = <0 0x800000>;
+			label = "fb_mem";
+		};
 	};
 };

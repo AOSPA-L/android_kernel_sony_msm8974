@@ -1,5 +1,5 @@
-/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
- * Copyright (C) 2014 Sony Mobile Communications Inc.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014 Sony Mobile Communications Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -86,6 +86,7 @@ struct disp_info_notify {
 	int value;
 	int is_suspend;
 	int ref_count;
+	bool init_done;
 };
 
 struct msm_sync_pt_data {
@@ -129,6 +130,7 @@ struct msm_mdp_interface {
 				struct mdp_histogram *hist);
 	int (*ad_calc_bl)(struct msm_fb_data_type *mfd, int bl_in,
 		int *bl_out, bool *bl_out_notify);
+	int (*ad_shutdown_cleanup)(struct msm_fb_data_type *mfd);
 	int (*panel_register_done)(struct mdss_panel_data *pdata);
 	u32 (*fb_stride)(u32 fb_index, u32 xres, int bpp);
 	int (*splash_init_fnc)(struct msm_fb_data_type *mfd);
@@ -203,7 +205,8 @@ struct msm_fb_data_type {
 	u32 bl_min_lvl;
 	u32 unset_bl_level;
 	u32 bl_updated;
-	u32 bl_level_old;
+	u32 bl_level_scaled;
+	u32 bl_level_prev_scaled;
 	struct mutex bl_lock;
 
 	struct platform_device *pdev;
