@@ -325,6 +325,8 @@ else ifdef CONFIG_MACH_SONY_CASTOR_WINDY
 	obj-$(CONFIG_MACH_SONY_CASTOR_WINDY) += board-sony_castor_windy-gpiomux.o board-sony_shinano-nfc.o bms-batterydata-vega.o
 else ifdef CONFIG_MACH_SONY_LEO
 	obj-$(CONFIG_MACH_SONY_LEO) += board-sony_leo-gpiomux.o board-sony_leo_samba-gpiomux-diff.o bms-batterydata-leo.o board-sony_shinano-nfc.o
+else ifdef CONFIG_MACH_SONY_LEO_DSDS
+	obj-$(CONFIG_MACH_SONY_LEO_DSDS) += board-sony_leo_dsds-gpiomux.o bms-batterydata-leo.o board-sony_shinano-nfc.o
 else ifdef CONFIG_MACH_SONY_ARIES
 	obj-$(CONFIG_MACH_SONY_ARIES) += board-sony_aries-gpiomux.o bms-batterydata-aries.o board-sony_shinano-nfc.o
 else ifdef CONFIG_MACH_SONY_SCORPION
@@ -402,7 +404,14 @@ obj-$(CONFIG_ARCH_APQ8084) += gpiomux-v2.o gpiomux.o
 obj-$(CONFIG_ARCH_FSM9900) += gpiomux-v2.o gpiomux.o
 
 obj-$(CONFIG_MSM_SLEEP_STATS_DEVICE) += idle_stats_device.o
-obj-$(CONFIG_MSM_DCVS) += msm_dcvs_scm.o msm_dcvs.o msm_mpdecision.o
+obj-$(CONFIG_MSM_DCVS) += msm_dcvs_scm.o msm_dcvs.o
+
+ifdef CONFIG_MSM_MPDEC
+obj-y += msm_mpdecision.o
+else
+obj-$(CONFIG_MSM_DCVS) += msm_mpdecision_qcom.o
+endif
+
 obj-$(CONFIG_MSM_RUN_QUEUE_STATS) += msm_rq_stats.o
 obj-$(CONFIG_MSM_SHOW_RESUME_IRQ) += msm_show_resume_irq.o
 obj-$(CONFIG_BT_MSM_PINTEST)  += btpintest.o
